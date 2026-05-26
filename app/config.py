@@ -1,10 +1,24 @@
 """配置管理模块"""
 
+import os
 import json
 import threading
 from pathlib import Path
 from typing import List, Optional
 from dataclasses import dataclass, asdict
+
+
+# 获取数据目录
+DATA_DIR = os.getenv("DATA_DIR", "/data")
+data_path = Path(DATA_DIR)
+if not data_path.exists():
+    try:
+        data_path.mkdir(parents=True, exist_ok=True)
+    except Exception as e:
+        print(f"创建数据目录失败: {e}")
+        # 如果无法创建 /data，回退到当前目录
+        DATA_DIR = "."
+        data_path = Path(DATA_DIR)
 
 
 @dataclass
@@ -39,7 +53,7 @@ class ConfigManager:
     """配置管理器 - 线程安全"""
 
     def __init__(self, config_file: str = "config.json"):
-        self.config_file = Path(config_file)
+        self.config_file = Path(DATA_DIR) / config_file
         self.config = Config()
         self.lock = threading.RLock()
         self.account_idx = 0

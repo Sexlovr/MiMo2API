@@ -43,11 +43,22 @@ async def chat_completions(
     if not account:
         raise HTTPException(status_code=503, detail={"error": {"message": "no mimo account"}})
 
-    # 构建查询字符串
-    query = build_query_from_messages(request.messages)
+    # 构建查询字符串和配置
+    query, thinking, search = build_query_from_messages(request.messages)
 
-    # 判断是否启用深度思考
-    thinking = bool(request.reasoning_effort)
+    # 如果请求中明确指定了 reasoning_effort，则覆盖标签中的 thinking 设置
+    if request.reasoning_effort:
+        thinking = True
+
+    # 处理会话ID，实现会话持续
+    # 如果 OpenAI 请求中有 user 字段，我们将其作为 conversationId
+    # 否则，我们根据消息内容生成一个稳定的 conversationId，以防 session 丢失
+    import hashlib
+    conversation_id = request.user if hasattr(request, 'user') and request.user else None
+    if not conversation_id and len(request.messages) > 0:
+        # 使用第一条消息的内容作为 Session 标识符（简单实现）
+        first_msg = request.messages[0].content[:100]
+        conversation_id = hashlib.md5(first_msg.encode()).hexdigest()
 
     # 创建Mimo客户端
     client = MimoClient(account)
@@ -55,13 +66,13 @@ async def chat_completions(
     # 流式响应
     if request.stream:
         return StreamingResponse(
-            stream_response(client, query, thinking, request.model),
+            stream_response(client, query, thinking, request.model, conversation_id, search),
             media_type="text/event-stream"
         )
 
     # 非流式响应
     try:
-        content, think_content, usage = await client.call_api(query, thinking)
+        content, think_content, usage = await client.call_api(query, thinking, request.model, conversation_id, search)
 
         # 如果有思考内容，拼接到回复前面
         full_content = content
@@ -93,7 +104,7 @@ async def chat_completions(
         raise HTTPException(status_code=500, detail={"error": {"message": str(e)}})
 
 
-async def stream_response(client: MimoClient, query: str, thinking: bool, model: str):
+async def stream_response(client: MimoClient, query: str, thinking: bool, model: str, conversation_id: str = None, search: bool = False):
     """流式响应生成器"""
 
     msg_id = f"chatcmpl-{uuid.uuid4().hex[:24]}"
@@ -105,7 +116,7 @@ async def stream_response(client: MimoClient, query: str, thinking: bool, model:
     in_think = False
 
     try:
-        async for sse_data in client.stream_api(query, thinking):
+        async for sse_data in client.stream_api(query, thinking, model, conversation_id, search):
             content = sse_data.get("content", "")
             if not content:
                 continue

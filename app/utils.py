@@ -75,28 +75,37 @@ def safe_utf8_len(text: str, max_len: int) -> int:
     return max_len
 
 
-def build_query_from_messages(messages: list, max_messages: int = 10, max_content_len: int = 4000) -> str:
+def build_query_from_messages(messages: list) -> tuple:
     """
-    从消息列表构建查询字符串
-
-    Args:
-        messages: 消息列表
-        max_messages: 最大消息数量
-        max_content_len: 单条消息最大长度
+    从消息列表构建查询字符串，并解析配置标签
 
     Returns:
-        查询字符串
+        (query_string, thinking, search)
     """
-    # 只保留最后N条消息
-    if len(messages) > max_messages:
-        messages = messages[-max_messages:]
+    thinking = False
+    search = False
 
     query_parts = []
     for msg in messages:
         content = msg.content
-        # 截断过长的内容
-        if len(content) > max_content_len:
-            content = content[:max_content_len] + "..."
-        query_parts.append(f"{msg.role}: {content}")
 
-    return "\n".join(query_parts)
+        # 解析标签: [think=on/off], [search=on/off]
+        if "[think=on]" in content:
+            thinking = True
+        if "[think=off]" in content:
+            thinking = False
+        if "[search=on]" in content:
+            search = True
+        if "[search=off]" in content:
+            search = False
+
+        # 移除标签以保持给模型的输入干净
+        clean_content = content
+        clean_content = clean_content.replace("[think=on]", "").replace("[think=off]", "")
+        clean_content = clean_content.replace("[search=on]", "").replace("[search=off]", "")
+        clean_content = clean_content.strip()
+
+        if clean_content:
+            query_parts.append(f"{msg.role}: {clean_content}")
+
+    return "\n".join(query_parts), thinking, search
