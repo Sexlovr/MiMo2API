@@ -17,6 +17,7 @@ class OpenAIRequest(BaseModel):
     stream: bool = False
     max_tokens: Optional[int] = None
     temperature: Optional[float] = None
+    user: Optional[str] = None
     reasoning_effort: Optional[str] = Field(None, description="深度思考等级: low/medium/high")
 
 

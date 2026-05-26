@@ -35,30 +35,30 @@ class MimoClient:
             "xiaomichatbot_ph": self.account.xiaomichatbot_ph,
         }
 
-    def _create_request_body(self, query: str, thinking: bool) -> dict:
+    def _create_request_body(self, query: str, thinking: bool, model: str, conversation_id: str = None, search: bool = False) -> dict:
         """创建请求体"""
         return {
-            "msgId": uuid.uuid4().hex[:32],
-            "conversationId": uuid.uuid4().hex[:32],
+            "msgId": uuid.uuid4().hex,
+            "conversationId": conversation_id or uuid.uuid4().hex,
             "query": query,
             "modelConfig": {
                 "enableThinking": thinking,
                 "temperature": 0.8,
                 "topP": 0.95,
-                "webSearchStatus": "disabled",
-                "model": "mimo-v2-flash-studio"
+                "webSearchStatus": "enabled" if search else "disabled",
+                "model": model
             },
             "multiMedias": []
         }
 
-    async def call_api(self, query: str, thinking: bool = False) -> Tuple[str, str, dict]:
+    async def call_api(self, query: str, thinking: bool = False, model: str = "mimo-v2-flash-studio", conversation_id: str = None, search: bool = False) -> Tuple[str, str, dict]:
         """
         调用Mimo API（非流式）
 
         Returns:
             (content, think_content, usage)
         """
-        body = self._create_request_body(query, thinking)
+        body = self._create_request_body(query, thinking, model, conversation_id, search)
 
         async with httpx.AsyncClient(timeout=self.TIMEOUT) as client:
             response = await client.post(
@@ -96,14 +96,14 @@ class MimoClient:
 
             return content, think_content, usage
 
-    async def stream_api(self, query: str, thinking: bool = False) -> AsyncIterator[dict]:
+    async def stream_api(self, query: str, thinking: bool = False, model: str = "mimo-v2-flash-studio", conversation_id: str = None, search: bool = False) -> AsyncIterator[dict]:
         """
         调用Mimo API（流式）
 
         Yields:
             SSE数据字典
         """
-        body = self._create_request_body(query, thinking)
+        body = self._create_request_body(query, thinking, model, conversation_id, search)
 
         async with httpx.AsyncClient(timeout=self.TIMEOUT) as client:
             async with client.stream(
